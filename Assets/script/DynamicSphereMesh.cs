@@ -25,6 +25,7 @@ public class DynamicSphereMesh : MonoBehaviour {
     void Start() {
         _mesh.vertices = createSphereVertices(_density).ToArray();
         _mesh.triangles = createTriangles(_density).ToArray();
+        _mesh.normals = createSphereNormals(_density).ToArray();
 
         _filter = GetComponent<MeshFilter>();
         _filter.sharedMesh = _mesh;
@@ -82,6 +83,21 @@ public class DynamicSphereMesh : MonoBehaviour {
             }
         }
         return triangels;
+    }
+    private List<Vector3> createSphereNormals(int density) {
+        List<Vector3> normals = new List<Vector3>();
+        foreach (var isInv in new bool[] { false, true }) {
+            for (int h = 0; h < density; h++) {
+                for (int w = 0; w < density; w++) {
+                    float phi = 90f - (180f / (density - 1)) * h;
+                    float theta = !isInv ?
+                                  180f / (density - 1) * (density - 1 - w) :
+                                  180f + 180f / (density - 1) * w;
+                    normals.Add(fromSphereCoord(_radius, phi, theta));
+                }
+            }
+        }
+        return normals;
     }
 
     private List<Vector3> createSphereVertices(int density) {
