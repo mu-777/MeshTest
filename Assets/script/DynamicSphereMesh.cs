@@ -37,12 +37,11 @@ public class DynamicSphereMesh : MonoBehaviour {
     void Update() {
         if (Input.GetKeyDown(KeyCode.Space)) {
             var updated = _filter.sharedMesh.vertices;
-            int h = UnityEngine.Random.Range(0, 4);
-            int w = UnityEngine.Random.Range(0, 4);
-            bool isInv = UnityEngine.Random.Range(0, 2) == 1;
+            int h = UnityEngine.Random.Range(0, _density - 1);
+            int w = UnityEngine.Random.Range(0, _density - 1);
+            bool isInv = UnityEngine.Random.Range(0.0f, 1.0f) > 0.5f;
             float radiusExtendRate = 1.0f + UnityEngine.Random.Range(0.5f, 1.0f);
             int iLeftUpper = h * _density + w + (isInv ? _density* _density : 0);
-            print(h + "," + w + "," + radiusExtendRate);
             foreach (var i in new int[] { iLeftUpper, iLeftUpper + 1, iLeftUpper + _density, iLeftUpper + _density + 1 }) {
                 float phi = 90f - (180f / (_density - 1)) * h;
                 float theta = !isInv ?
@@ -63,11 +62,11 @@ public class DynamicSphereMesh : MonoBehaviour {
     private List<int> divideSq2Tri(int[] square, bool isInv = false) {
         if (!isInv) {
             return new List<int>() {
-                square[0], square[3], square[2], square[0], square[1], square[3]
+                square[0], square[2], square[3], square[0], square[3], square[1]
             };
         } else {
             return new List<int>() {
-                square[0], square[2], square[3], square[0], square[3], square[1]
+                square[0], square[3], square[2], square[0], square[1], square[3]
             };
         }
     }
