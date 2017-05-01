@@ -25,7 +25,7 @@ public class DynamicSphereMesh : MonoBehaviour {
     void Start() {
         _mesh.vertices = createSphereVertices(_density).ToArray();
         _mesh.triangles = createTriangles(_density).ToArray();
-        _mesh.normals = createSphereNormals(_density).ToArray();
+        _mesh.normals = createSphereVertices(_density).ToArray();
 
         _filter = GetComponent<MeshFilter>();
         _filter.sharedMesh = _mesh;
@@ -37,17 +37,21 @@ public class DynamicSphereMesh : MonoBehaviour {
     void Update() {
         if (Input.GetKeyDown(KeyCode.Space)) {
             var updated = _filter.sharedMesh.vertices;
+            int size = _density * 2;
             int h = UnityEngine.Random.Range(0, _density - 1);
             int w = UnityEngine.Random.Range(0, _density - 1);
             bool isInv = UnityEngine.Random.Range(0.0f, 1.0f) > 0.5f;
             float radiusExtendRate = 1.0f + UnityEngine.Random.Range(0.5f, 1.0f);
-            int iLeftUpper = h * _density + w + (isInv ? _density* _density : 0);
-            foreach (var i in new int[] { iLeftUpper, iLeftUpper + 1, iLeftUpper + _density, iLeftUpper + _density + 1 }) {
-                float phi = 90f - (180f / (_density - 1)) * h;
+            int iLeftUpper = (2 * h + 1) * size + (2 * w + 1) + (isInv ? size* size : 0);
+            int[] idx = new int[] { iLeftUpper, iLeftUpper + 1, iLeftUpper + size, iLeftUpper + size + 1 };
+            int[] hs = new int[] { h, h, h + 1, h + 1 };
+            int[] ws = new int[] { w, w + 1, w, w + 1 };
+            for (int i = 0; i < 4; i++) {
+                float phi = 90f - (180f / (_density - 1)) * hs[i];
                 float theta = !isInv ?
-                              180f / (_density - 1) * (_density - 1 - w) :
-                              180f + 180f / (_density - 1) * w;
-                updated[i] = fromSphereCoord(_radius * radiusExtendRate, phi, theta);
+                              180f / (_density - 1) * (_density - 1 - ws[i]) :
+                              180f + 180f / (_density - 1) * ws[i];
+                updated[idx[i]] = fromSphereCoord(_radius * radiusExtendRate, phi, theta);
             }
             _filter.sharedMesh.vertices = updated;
         }
@@ -73,42 +77,31 @@ public class DynamicSphereMesh : MonoBehaviour {
 
     private List<int> createTriangles(int density) {
         List<int> triangels = new List<int>();
+        int size = 2 * density;
         foreach (var isInv in new bool[] { false, true }) {
-            for (int h = 0; h < density - 1; h++) {
-                for (int w = 0; w < density - 1; w++) {
-                    int i = h * density + w + (isInv ? density* density : 0);
-                    triangels.AddRange(divideSq2Tri(new int[] { i, i + 1, i + density, i + density + 1 }, isInv));
+            for (int h = 0; h < size - 1; h++) {
+                for (int w = 0; w < size - 1; w++) {
+                    int i = h * size + w + (isInv ? size* size : 0);
+                    triangels.AddRange(divideSq2Tri(new int[] { i, i + 1, i + size, i + size + 1 }, isInv));
                 }
             }
         }
         return triangels;
     }
-    private List<Vector3> createSphereNormals(int density) {
-        List<Vector3> normals = new List<Vector3>();
-        foreach (var isInv in new bool[] { false, true }) {
-            for (int h = 0; h < density; h++) {
-                for (int w = 0; w < density; w++) {
-                    float phi = 90f - (180f / (density - 1)) * h;
-                    float theta = !isInv ?
-                                  180f / (density - 1) * (density - 1 - w) :
-                                  180f + 180f / (density - 1) * w;
-                    normals.Add(fromSphereCoord(_radius, phi, theta));
-                }
-            }
-        }
-        return normals;
-    }
-
     private List<Vector3> createSphereVertices(int density) {
         List<Vector3> vertices = new List<Vector3>();
         foreach (var isInv in new bool[] { false, true }) {
             for (int h = 0; h < density; h++) {
-                for (int w = 0; w < density; w++) {
-                    float phi = 90f - (180f / (density - 1)) * h;
-                    float theta = !isInv ?
-                                  180f / (density - 1) * (density - 1 - w) :
-                                  180f + 180f / (density - 1) * w;
-                    vertices.Add(fromSphereCoord(_radius, phi, theta));
+                for (int d = 0; d < 2; d++) {
+                    for (int w = 0; w < density; w++) {
+                        for (int d2 = 0; d2 < 2; d2++) {
+                            float phi = 90f - (180f / (density - 1)) * h;
+                            float theta = !isInv ?
+                                          180f / (density - 1) * (density - 1 - w) :
+                                          180f + 180f / (density - 1) * w;
+                            vertices.Add(fromSphereCoord(_radius, phi, theta));
+                        }
+                    }
                 }
             }
         }
