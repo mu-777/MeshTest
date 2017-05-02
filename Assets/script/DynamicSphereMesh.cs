@@ -16,16 +16,49 @@ public class DynamicSphereMesh : MonoBehaviour {
     [SerializeField]
     private int _density = 5; // odd num only
     [SerializeField]
-    private float _interval = 0.1f;
+    private float _period_sec = 4;
+    [SerializeField]
+    private float _radius_rate = 0.3f;
 
+    private int size;
     private Mesh _mesh = new Mesh();
     private MeshFilter _filter = new MeshFilter();
     private MeshRenderer _renderer = new MeshRenderer();
+    private float startTime = -1f;
+    private bool isEnableVertexAnimetor = false;
+    private List<float> radiusExtendRates = new List<float>();
+    private List<float> periods = new List<float>();
 
-    void Start() {
-        _mesh.vertices = createSphereVertices(_density).ToArray();
-        _mesh.triangles = createTriangles(_density).ToArray();
-        _mesh.normals = createSphereVertices(_density).ToArray();
+    void Awake() {
+        size = 2 * _density;
+
+        var vertices = new List<Vector3>();
+        var triangles = new List<int>();
+
+        float phi, theta;
+        int idx;
+        foreach (var isInv in new bool[] { false, true }) {
+            for (int h = 0; h < size; h++) {
+                for (int w = 0; w < size; w++) {
+                    phi = 90f - (180f / (_density - 1)) * (int)(h / 2);
+                    theta = !isInv ?
+                            180f / (_density - 1) * (_density - 1 - (int)(w / 2)) :
+                            180f + 180f / (_density - 1) * (int)(w / 2);
+                    vertices.Add(SphereCoord.ToVector3(_radius, phi, theta));
+
+                    if (h >= size - 1 || w >= size - 1) {
+                        continue;
+                    }
+                    idx = h * size + w + (isInv ? size* size : 0);
+                    triangles.AddRange(divideSq2Tri(new int[] { idx, idx + 1, idx + size, idx + size + 1 },
+                                                    isInv));
+                }
+            }
+        }
+
+        _mesh.vertices = vertices.ToArray();
+        _mesh.triangles = triangles.ToArray();
+        _mesh.normals = vertices.ToArray();
 
         _filter = GetComponent<MeshFilter>();
         _filter.sharedMesh = _mesh;
@@ -34,33 +67,53 @@ public class DynamicSphereMesh : MonoBehaviour {
         _renderer.material = _mat;
     }
 
+    void Start() {
+
+    }
+
     void Update() {
         if (Input.GetKeyDown(KeyCode.Space)) {
-            var updated = _filter.sharedMesh.vertices;
-            int size = _density * 2;
-            int h = UnityEngine.Random.Range(0, _density - 1);
-            int w = UnityEngine.Random.Range(0, _density - 1);
-            bool isInv = UnityEngine.Random.Range(0.0f, 1.0f) > 0.5f;
-            float radiusExtendRate = 1.0f + UnityEngine.Random.Range(0.5f, 1.0f);
-            int iLeftUpper = (2 * h + 1) * size + (2 * w + 1) + (isInv ? size* size : 0);
-            int[] idx = new int[] { iLeftUpper, iLeftUpper + 1, iLeftUpper + size, iLeftUpper + size + 1 };
-            int[] hs = new int[] { h, h, h + 1, h + 1 };
-            int[] ws = new int[] { w, w + 1, w, w + 1 };
-            for (int i = 0; i < 4; i++) {
-                float phi = 90f - (180f / (_density - 1)) * hs[i];
-                float theta = !isInv ?
-                              180f / (_density - 1) * (_density - 1 - ws[i]) :
-                              180f + 180f / (_density - 1) * ws[i];
-                updated[idx[i]] = fromSphereCoord(_radius * radiusExtendRate, phi, theta);
+            isEnableVertexAnimetor = !isEnableVertexAnimetor;
+            if (isActiveAndEnabled) {
+                foreach (var isInv in new bool[] { false, true }) {
+                    for (int h = 1; h < size - 2; h += 2) {
+                        for (int w = 1; w < size - 2; w += 2) {
+                            periods.Add(_period_sec * UnityEngine.Random.Range(0.5f, 1.5f));
+                            radiusExtendRates.Add(UnityEngine.Random.Range(-1f, 1f) * _radius_rate);
+                        }
+                    }
+                }
+            } else {
+                periods.Clear();
+                radiusExtendRates.Clear();
             }
-            _filter.sharedMesh.vertices = updated;
         }
     }
 
-    private Vector3 fromSphereCoord(float radius, float pitch_deg, float yaw_deg) {
-        return new Vector3(radius * Mathf.Cos(pitch_deg * Mathf.Deg2Rad)*Mathf.Cos(yaw_deg * Mathf.Deg2Rad),
-                           radius * Mathf.Sin(pitch_deg * Mathf.Deg2Rad),
-                           radius * Mathf.Cos(pitch_deg * Mathf.Deg2Rad) * Mathf.Sin(yaw_deg * Mathf.Deg2Rad));
+    void FixedUpdate() {
+        if (!isEnableVertexAnimetor) {
+            return;
+        } else if (startTime < 0f) {
+            startTime = Time.time;
+        }
+
+        var updated = _filter.sharedMesh.vertices;
+        var passedTime = Time.time - startTime;
+        var sphereCoord = new SphereCoord();
+        var j = 0;
+        foreach (var isInv in new bool[] { false, true }) {
+            for (int h = 1; h < size - 2; h += 2) {
+                for (int w = 1; w < size - 2; w += 2) {
+                    var r = _radius * (1.0f + radiusExtendRates[j] * Mathf.Cos(2f * Mathf.PI * passedTime / periods[j]));
+                    j++;
+                    for (int i = 0; i < 4; i++) {
+                        sphereCoord = sphereCoordFromHW(r, h + (int)(i / 2), w + (int)(i % 2), isInv);
+                        updated[(h + (int)(i / 2))*size + (w + (int)(i % 2)) + (isInv ? size* size : 0)] = sphereCoord.ToVector3();
+                    }
+                }
+            }
+        }
+        _filter.sharedMesh.vertices = updated;
     }
 
     private List<int> divideSq2Tri(int[] square, bool isInv = false) {
@@ -75,50 +128,50 @@ public class DynamicSphereMesh : MonoBehaviour {
         }
     }
 
-    private List<int> createTriangles(int density) {
-        List<int> triangels = new List<int>();
-        int size = 2 * density;
-        foreach (var isInv in new bool[] { false, true }) {
-            for (int h = 0; h < size - 1; h++) {
-                for (int w = 0; w < size - 1; w++) {
-                    int i = h * size + w + (isInv ? size* size : 0);
-                    triangels.AddRange(divideSq2Tri(new int[] { i, i + 1, i + size, i + size + 1 }, isInv));
-                }
-            }
-        }
-        return triangels;
-    }
-    private List<Vector3> createSphereVertices(int density) {
-        List<Vector3> vertices = new List<Vector3>();
-        foreach (var isInv in new bool[] { false, true }) {
-            for (int h = 0; h < density; h++) {
-                for (int d = 0; d < 2; d++) {
-                    for (int w = 0; w < density; w++) {
-                        for (int d2 = 0; d2 < 2; d2++) {
-                            float phi = 90f - (180f / (density - 1)) * h;
-                            float theta = !isInv ?
-                                          180f / (density - 1) * (density - 1 - w) :
-                                          180f + 180f / (density - 1) * w;
-                            vertices.Add(fromSphereCoord(_radius, phi, theta));
-                        }
-                    }
-                }
-            }
-        }
-        return vertices;
+    private SphereCoord sphereCoordFromHW(float radius, int h, int w, bool isInv) {
+        var phi = 90f - (180f / (_density - 1)) * (int)(h / 2);
+        var theta = !isInv ?
+                    180f / (_density - 1) * (_density - 1 - (int)(w / 2)) :
+                    180f + 180f / (_density - 1) * (int)(w / 2);
+        return new SphereCoord(radius, phi, theta);
     }
 
-    private List<Vector3> createPlaneVertices(int density) {
-        List<Vector3> vertices = new List<Vector3>();
-        foreach (var isInv in new bool[] { false, true }) {
-            for (int h = 0; h < density; h++) {
-                for (int w = 0; w < density; w++) {
-                    vertices.Add(new Vector3((-(density - 1) / 2 + w) * _interval,
-                                             ((density - 1) / 2 - h) * _interval,
-                                             0));
-                }
-            }
+    private class SphereCoord {
+        private float _radius, _pitch, _yaw;
+        public SphereCoord() { }
+        public SphereCoord(float radius, float pitch_deg, float yaw_deg) {
+            _radius = radius;
+            _pitch = pitch_deg * Mathf.Deg2Rad;
+            _yaw = yaw_deg * Mathf.Deg2Rad;
         }
-        return vertices;
+
+        public float radius {
+            get { return _radius; }
+        }
+        public float pitch {
+            get { return _pitch; }
+        }
+        public float yaw {
+            get { return _yaw; }
+        }
+        public float pitch_deg {
+            get { return _pitch * Mathf.Rad2Deg; }
+        }
+        public float yaw_deg {
+            get { return _yaw * Mathf.Rad2Deg; }
+        }
+
+        public Vector3 ToVector3() {
+            return new Vector3(_radius * Mathf.Cos(pitch) * Mathf.Cos(yaw),
+                               _radius * Mathf.Sin(pitch),
+                               _radius * Mathf.Cos(pitch) * Mathf.Sin(yaw));
+        }
+
+        static public Vector3 ToVector3(float radius, float pitch_deg, float yaw_deg) {
+            return new Vector3(radius * Mathf.Cos(pitch_deg * Mathf.Deg2Rad) * Mathf.Cos(yaw_deg * Mathf.Deg2Rad),
+                               radius * Mathf.Sin(pitch_deg * Mathf.Deg2Rad),
+                               radius * Mathf.Cos(pitch_deg * Mathf.Deg2Rad) * Mathf.Sin(yaw_deg * Mathf.Deg2Rad));
+        }
     }
+
 }
